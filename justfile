@@ -36,47 +36,11 @@ LDFLAGS := '-s -w'
 [private]
 default: help
 
-# Cleans build artifacts.
-[private]
-_build_clean os arch:
+# Builds the project.
+build os arch:
+    @{{MKDIR}} {{GOTMPDIR}}
     # Cleaning build artifacts for {{os}}/{{arch}}...
     @{{RM}} "{{join(BUILD_DIR, os, arch)}}"
-
-# Creates the built tmp dir.
-[private]
-_build_tmp:
-    @{{MKDIR}} {{GOTMPDIR}}
-
-# Check if test coverage data exists.
-[private]
-_check_coverage:
-    @{{
-        if path_exists(COVERAGE_DATA) != 'true' {
-            'just test'
-        } else {
-            ''
-        }
-    }}
-
-# Check if build exists.
-[private]
-_check_build os arch:
-    @{{
-        if path_exists(join(TMPDIR, PROJECT_NAME)) != 'true' {
-            f'just build {{os}} {{arch}}'
-        } else {
-            ''
-        }
-    }}
-
-# Cleans distribution artifacts.
-[private]
-_dist_clean os arch:
-    # Cleaning distribution artifacts for {{os}}/{{arch}}...
-    @{{RM}} "{{join(DIST_DIR, PROJECT_NAME)}}-{{os}}-{{arch}}"*
-
-# Builds the project.
-build os arch: _build_tmp (_build_clean os arch)
     # Building artifacts for {{os}}/{{arch}}...
     @{{MKDIR}} "{{join(BUILD_DIR, os, arch)}}"
     @CGO_ENABLED=0 GOOS={{os}} GOARCH={{arch}} {{GO}} build \
@@ -110,8 +74,17 @@ clean-cache:
     @{{RM}} {{GOTMPDIR}}
 
 # Creates distribution package.
-dist os arch: (_check_build os arch) (_dist_clean os arch)
+dist os arch:
+    # Cleaning distribution artifacts for {{os}}/{{arch}}...
+    @{{RM}} "{{join(DIST_DIR, PROJECT_NAME)}}-{{os}}-{{arch}}"*
     # Building distribution package for {{os}}-{{arch}}...
+    @{{ \
+        if path_exists(join(TMPDIR, PROJECT_NAME)) != 'true' { \
+            f'just build {{os}} {{arch}}' \
+        } else { \
+            '' \
+        } \
+    }}
     @{{MKDIR}} "{{DIST_DIR}}"
     @{{TAR}} -c -z \
         -f "{{join(DIST_DIR, PROJECT_NAME)}}-{{os}}-{{arch}}.tar.gz" \
@@ -163,22 +136,26 @@ lint: && format-show vet
     # Checking the code...
 
 # Runs the app.
-run *args: _build_tmp
+run *args:
+    @{{MKDIR}} {{GOTMPDIR}}
     @-{{GO}} run {{PROJECT_DIR}} {{args}}
 
 # Runs the tests.
-test *tests: _build_tmp
+test *tests:
+    @{{MKDIR}} {{GOTMPDIR}}
     # Running tests... {{tests}}
     @-{{GO}} test {{TEST_ARGS}} {{PROJECT_DIR}} \
-    {{ if tests != '' { '-run ' + tests } else { '' } }}
+    {{ if tests != '' { f'-run {{tests}}' } else { '' } }}
 
 # Creates the tests coverage report (html)
-test-coverage: _check_coverage
+test-coverage:
     # Creating tests report coverage...
+    @{{ if path_exists(COVERAGE_DATA) != 'true' { 'just test' } else { '' } }}
     @{{MKDIR}} "{{DOCS_DIR}}"
     @{{GO}} tool cover -html="{{COVERAGE_DATA}}" -o "{{COVERAGE_REPORT}}"
 
 # Examines the code for suspicious constructs.
-vet: _build_tmp
+vet:
+    @{{MKDIR}} {{GOTMPDIR}}
     # Examining the code...
     @{{GO}} vet {{PROJECT_DIR}}
