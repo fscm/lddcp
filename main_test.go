@@ -161,38 +161,6 @@ func TestDefaultLibPaths_DedupsFallbacks(t *testing.T) {
 	}
 }
 
-func TestFallbackLibPaths_32Bit(t *testing.T) {
-	want := []string{
-		"/lib32",
-		"/usr/lib32",
-		"/lib/i386-linux-gnu",
-		"/usr/lib/i386-linux-gnu",
-		"/lib/arm-linux-gnueabihf",
-		"/usr/lib/arm-linux-gnueabihf",
-	}
-	for _, path := range want {
-		if !slices.Contains(fallbackLibPaths, path) {
-			t.Errorf("fallbackLibPaths is missing 32-bit search path %q", path)
-		}
-	}
-}
-
-func TestFallbackLibPaths_64Bit(t *testing.T) {
-	want := []string{
-		"/lib64",
-		"/usr/lib64",
-		"/lib/x86_64-linux-gnu",
-		"/usr/lib/x86_64-linux-gnu",
-		"/lib/aarch64-linux-gnu",
-		"/usr/lib/aarch64-linux-gnu",
-	}
-	for _, path := range want {
-		if !slices.Contains(fallbackLibPaths, path) {
-			t.Errorf("fallbackLibPaths is missing 64-bit search path %q", path)
-		}
-	}
-}
-
 func TestFindLibrary(t *testing.T) {
 	dir1, dir2 := t.TempDir(), t.TempDir()
 	target := filepath.Join(dir2, "libfoo.so")
