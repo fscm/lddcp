@@ -4,7 +4,7 @@
 # SPDX-FileCopyrightText: 2026 Frederico Martins
 # SPDX-License-Identifier: GPL-3.0-only
 
-set unstable # for 'wich()'
+set unstable # for 'which()'
 
 PROJECT_DIR := absolute_path(justfile_directory())
 PROJECT_NAME := file_name(PROJECT_DIR)
@@ -20,6 +20,7 @@ COVERAGE_DATA := join(TMPDIR, 'coverage.dat')
 COVERAGE_REPORT := join(DOCS_DIR, 'coverage-report.html')
 
 GO := require('go')
+MANDOC := require('mandoc')
 TAR := require('tar')
 FORMAT := require(if which('gofumpt') != '' { 'gofumpt' } else { 'gofmt' })
 
@@ -29,7 +30,8 @@ RM := '\rm -rf'
 BUILD_ARGS := '-trimpath'
 FORMAT_ARGS := '-l -w'
 FORMAT_SHOW_ARGS := '-d'
-TEST_ARGS := '-cover -coverprofile ' + COVERAGE_DATA  # '-v'
+MANDOC_ARGS := '-T lint'
+TEST_ARGS := '-cover -coverprofile ' + COVERAGE_DATA # '-v'
 
 LDFLAGS := '-s -w'
 
@@ -38,16 +40,16 @@ default: help
 
 # Builds the project.
 build os arch:
-    @{{MKDIR}} {{GOTMPDIR}}
-    # Cleaning build artifacts for {{os}}/{{arch}}...
-    @{{RM}} "{{join(BUILD_DIR, os, arch)}}"
-    # Building artifacts for {{os}}/{{arch}}...
-    @{{MKDIR}} "{{join(BUILD_DIR, os, arch)}}"
-    @CGO_ENABLED=0 GOOS={{os}} GOARCH={{arch}} {{GO}} build \
-        {{BUILD_ARGS}} \
-        -ldflags="{{LDFLAGS}}" \
-        -o "{{join(BUILD_DIR, os, arch, PROJECT_NAME)}}" \
-        "{{PROJECT_DIR}}"
+    @{{ MKDIR }} {{ GOTMPDIR }}
+    # Cleaning build artifacts for {{ os }}/{{ arch }}...
+    @{{ RM }} "{{ join(BUILD_DIR, os, arch) }}"
+    # Building artifacts for {{ os }}/{{ arch }}...
+    @{{ MKDIR }} "{{ join(BUILD_DIR, os, arch) }}"
+    @CGO_ENABLED=0 GOOS={{ os }} GOARCH={{ arch }} {{ GO }} build \
+        {{ BUILD_ARGS }} \
+        -ldflags="{{ LDFLAGS }}" \
+        -o "{{ join(BUILD_DIR, os, arch, PROJECT_NAME) }}" \
+        "{{ PROJECT_DIR }}"
 
 # Builds the project for all supported systems.
 build-all: (build 'linux' '386') (build 'linux' 'amd64') (build 'linux' 'arm64')
@@ -56,7 +58,7 @@ build-all: (build 'linux' '386') (build 'linux' 'amd64') (build 'linux' 'arm64')
 [private]
 build-clean:
     # Cleaning build artifacts...
-    @{{RM}} "{{BUILD_DIR}}"
+    @{{ RM }} "{{ BUILD_DIR }}"
 
 # Cleans the project builds.
 clean: build-clean dist-clean
@@ -68,16 +70,16 @@ clean-all: clean clean-cache docs-clean
 # Cleans the build and run cache artifacts.
 clean-cache:
     # Cleaning caches...
-    @{{GO}} clean -cache
-    @{{RM}} {{GOCACHE}}
+    @{{ GO }} clean -cache
+    @{{ RM }} {{ GOCACHE }}
     # Cleaning temporary files...
-    @{{RM}} {{GOTMPDIR}}
+    @{{ RM }} {{ GOTMPDIR }}
 
 # Creates distribution package.
 dist os arch:
-    # Cleaning distribution artifacts for {{os}}/{{arch}}...
-    @{{RM}} "{{join(DIST_DIR, PROJECT_NAME)}}-{{os}}-{{arch}}"*
-    # Building distribution package for {{os}}-{{arch}}...
+    # Cleaning distribution artifacts for {{ os }}/{{ arch }}...
+    @{{ RM }} "{{ join(DIST_DIR, PROJECT_NAME) }}-{{ os }}-{{ arch }}"*
+    # Building distribution package for {{ os }}-{{ arch }}...
     @{{ \
         if path_exists(join(TMPDIR, PROJECT_NAME)) != 'true' { \
             f'just build {{os}} {{arch}}' \
@@ -85,10 +87,10 @@ dist os arch:
             '' \
         } \
     }}
-    @{{MKDIR}} "{{DIST_DIR}}"
-    @{{TAR}} -c -z \
-        -f "{{join(DIST_DIR, PROJECT_NAME)}}-{{os}}-{{arch}}.tar.gz" \
-        -C "{{join(BUILD_DIR, os, arch)}}" "{{PROJECT_NAME}}"
+    @{{ MKDIR }} "{{ DIST_DIR }}"
+    @{{ TAR }} -c -z \
+        -f "{{ join(DIST_DIR, PROJECT_NAME) }}-{{ os }}-{{ arch }}.tar.gz" \
+        -C "{{ join(BUILD_DIR, os, arch) }}" "{{ PROJECT_NAME }}"
 
 # Creates distribution packages for all supported systems.
 dist-all: (dist 'linux' '386') (dist 'linux' 'amd64') (dist 'linux' 'arm64')
@@ -97,30 +99,30 @@ dist-all: (dist 'linux' '386') (dist 'linux' 'amd64') (dist 'linux' 'arm64')
 [private]
 dist-clean:
     # Cleaning distribution artifacts...
-    @{{RM}} "{{DIST_DIR}}"
+    @{{ RM }} "{{ DIST_DIR }}"
 
 # Creates the project documentation.
 docs: docs-clean
     # Generating documentation...
-    @{{MKDIR}} "{{DOCS_DIR}}"
-    @{{GO}} doc "{{PROJECT_DIR}}" \
-        > "{{join(DOCS_DIR, PROJECT_NAME)}}.txt"
+    @{{ MKDIR }} "{{ DOCS_DIR }}"
+    @{{ GO }} doc "{{ PROJECT_DIR }}" \
+        > "{{ join(DOCS_DIR, PROJECT_NAME) }}.txt"
 
 # Cleans the documentation folder.
 [private]
 docs-clean:
     # Cleaning documentation...
-    @{{RM}} "{{DOCS_DIR}}"
+    @{{ RM }} "{{ DOCS_DIR }}"
 
 # Formats the code.
 format:
     # Formating the code...
-    @{{FORMAT}} {{FORMAT_ARGS}} "{{PROJECT_DIR}}"
+    @{{ FORMAT }} {{ FORMAT_ARGS }} "{{ PROJECT_DIR }}"
 
 # Shows the required code formats.
 format-show:
     # Getting required code formats...
-    @-{{FORMAT}} {{FORMAT_SHOW_ARGS}} "{{PROJECT_DIR}}"
+    @-{{ FORMAT }} {{ FORMAT_SHOW_ARGS }} "{{ PROJECT_DIR }}"
 
 # Shows this help message.
 help:
@@ -135,27 +137,32 @@ help:
 lint: && format-show vet
     # Checking the code...
 
+# Checks the project for code smells ('format' and 'vet').
+lint-man:
+    # Checking the man page...
+    @{{ MANDOC }} {{ MANDOC_ARGS }} {{ PROJECT_NAME }}.1
+
 # Runs the app.
 run *args:
-    @{{MKDIR}} {{GOTMPDIR}}
-    @-{{GO}} run {{PROJECT_DIR}} {{args}}
+    @{{ MKDIR }} {{ GOTMPDIR }}
+    @-{{ GO }} run {{ PROJECT_DIR }} {{ args }}
 
 # Runs the tests.
 test *tests:
-    @{{MKDIR}} {{GOTMPDIR}}
-    # Running tests... {{tests}}
-    @-{{GO}} test {{TEST_ARGS}} {{PROJECT_DIR}} \
+    @{{ MKDIR }} {{ GOTMPDIR }}
+    # Running tests... {{ tests }}
+    @-{{ GO }} test {{ TEST_ARGS }} {{ PROJECT_DIR }} \
     {{ if tests != '' { f'-run {{tests}}' } else { '' } }}
 
 # Creates the tests coverage report (html)
 test-coverage:
     # Creating tests report coverage...
     @{{ if path_exists(COVERAGE_DATA) != 'true' { 'just test' } else { '' } }}
-    @{{MKDIR}} "{{DOCS_DIR}}"
-    @{{GO}} tool cover -html="{{COVERAGE_DATA}}" -o "{{COVERAGE_REPORT}}"
+    @{{ MKDIR }} "{{ DOCS_DIR }}"
+    @{{ GO }} tool cover -html="{{ COVERAGE_DATA }}" -o "{{ COVERAGE_REPORT }}"
 
 # Examines the code for suspicious constructs.
 vet:
-    @{{MKDIR}} {{GOTMPDIR}}
+    @{{ MKDIR }} {{ GOTMPDIR }}
     # Examining the code...
-    @{{GO}} vet {{PROJECT_DIR}}
+    @{{ GO }} vet {{ PROJECT_DIR }}
