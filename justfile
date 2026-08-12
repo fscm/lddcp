@@ -90,7 +90,9 @@ dist os arch:
     @{{ MKDIR }} "{{ DIST_DIR }}"
     @{{ TAR }} -c -z \
         -f "{{ join(DIST_DIR, PROJECT_NAME) }}-{{ os }}-{{ arch }}.tar.gz" \
-        -C "{{ join(BUILD_DIR, os, arch) }}" "{{ PROJECT_NAME }}"
+        -C "{{ join(BUILD_DIR, os, arch) }}" "{{ PROJECT_NAME }}" \
+        -C "{{ PROJECT_DIR }}" "{{ PROJECT_NAME }}.1"
+
 
 # Creates distribution packages for all supported systems.
 dist-all: (dist 'linux' '386') (dist 'linux' 'amd64') (dist 'linux' 'arm64')
@@ -140,7 +142,7 @@ lint: && format-show vet
 # Checks the project for code smells ('format' and 'vet').
 lint-man:
     # Checking the man page...
-    @{{ MANDOC }} {{ MANDOC_ARGS }} {{ PROJECT_NAME }}.1
+    @{{ MANDOC }} {{ MANDOC_ARGS }} "{{ join(PROJECT_DIR, PROJECT_NAME) }}.1"
 
 # Runs the app.
 run *args:
