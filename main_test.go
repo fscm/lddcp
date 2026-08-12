@@ -44,7 +44,7 @@ func dynamicSystemBinary(t *testing.T) string {
 	t.Helper()
 	candidates := []string{"/bin/sh", "/bin/ls", "/usr/bin/ls", "/bin/bash"}
 	for _, candidate := range candidates {
-		if info, err := parseELF(candidate); err == nil && info.interp != "" {
+		if interp, _, err := parseELF(candidate); err == nil && interp != "" {
 			return candidate
 		}
 	}
@@ -266,14 +266,14 @@ func TestParseArgs_Exit(t *testing.T) {
 
 func TestParseELF_DynamicBinary(t *testing.T) {
 	binary := dynamicSystemBinary(t)
-	info, err := parseELF(binary)
+	interp, needed, err := parseELF(binary)
 	if err != nil {
 		t.Fatalf("parseELF() error: [%q] %v", binary, err)
 	}
-	if info.interp == "" {
+	if interp == "" {
 		t.Errorf("expected a non-empty PT_INTERP for %q", binary)
 	}
-	if len(info.needed) == 0 {
+	if len(needed) == 0 {
 		t.Errorf("expected at least one DT_NEEDED entry for %q", binary)
 	}
 }
@@ -283,13 +283,15 @@ func TestParseELF_NotELF(t *testing.T) {
 	if err := os.WriteFile(path, []byte("just some text"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parseELF(path); err == nil {
+	if _, _, err := parseELF(path); err == nil {
 		t.Fatal("expected an error for non-ELF file, got nil")
 	}
 }
 
 func TestParseELF_NotFound(t *testing.T) {
-	if _, err := parseELF(filepath.Join(t.TempDir(), "none.txt")); err == nil {
+	if _, _, err := parseELF(
+		filepath.Join(t.TempDir(), "none.txt"),
+	); err == nil {
 		t.Fatal("expected an error for nonexistent file, got nil")
 	}
 }
@@ -299,16 +301,12 @@ func TestParseELF_SelfBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := parseELF(self)
+	interp, needed, err := parseELF(self)
 	if err != nil {
 		t.Skipf("test binary could not be inspected as ELF: %v", err)
 	}
-	if (info.interp == "") != (len(info.needed) == 0) {
-		t.Errorf(
-			"inconsistent result: interp=%q needed=%v",
-			info.interp,
-			info.needed,
-		)
+	if (interp == "") != (len(needed) == 0) {
+		t.Errorf("inconsistent result: interp=%q needed=%v", interp, needed)
 	}
 }
 
@@ -317,20 +315,20 @@ func TestParseELF_Supports32Bit(t *testing.T) {
 	if err := os.WriteFile(path, minimalELF32, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	info, err := parseELF(path)
+	interp, needed, err := parseELF(path)
 	if err != nil {
 		t.Fatalf("parseELF() error: [32-bit ELF file should be valid] %v", err)
 	}
-	if info.interp != "" {
+	if interp != "" {
 		t.Errorf(
 			"interp: [fixture has no program headers] got %q wanted empty",
-			info.interp,
+			interp,
 		)
 	}
-	if len(info.needed) != 0 {
+	if len(needed) != 0 {
 		t.Errorf(
 			"needed: [fixture has no dynamic section] got %v wanted none",
-			info.needed,
+			needed,
 		)
 	}
 }
@@ -472,14 +470,14 @@ func TestScannerParsePath_Integration(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(destination, realPath)); err != nil {
 		t.Errorf("expected %q itself to have been copied: %v", realPath, err)
 	}
-	info, err := parseELF(realPath)
+	interp, _, err := parseELF(realPath)
 	if err != nil {
 		t.Fatalf("parseELF() error: [%q] %v", realPath, err)
 	}
-	if _, err := os.Lstat(filepath.Join(destination, info.interp)); err != nil {
+	if _, err := os.Lstat(filepath.Join(destination, interp)); err != nil {
 		t.Errorf(
 			"expected interpreter %q to have been copied: %v",
-			info.interp,
+			interp,
 			err,
 		)
 	}
@@ -548,11 +546,11 @@ func TestScannerParsePath_MissingLibraryWarnsButSucceeds(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(destination, realPath)); err != nil {
 		t.Errorf("expected the binary itself to still be copied: %v", err)
 	}
-	info, err := parseELF(realPath)
+	interp, _, err := parseELF(realPath)
 	if err != nil {
 		t.Fatalf("parseELF() error: [%q] %v", realPath, err)
 	}
-	if _, err := os.Lstat(filepath.Join(destination, info.interp)); err != nil {
+	if _, err := os.Lstat(filepath.Join(destination, interp)); err != nil {
 		t.Errorf("expected the interpreter to still be copied: %v", err)
 	}
 }
@@ -562,7 +560,7 @@ func TestScannerParsePath_PreservesSymlinkChainAndPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := parseELF(self); err != nil {
+	if _, _, err := parseELF(self); err != nil {
 		t.Skipf("test binary is not a usable ELF file: %v", err)
 	}
 	dir := t.TempDir()

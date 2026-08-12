@@ -8,50 +8,84 @@ lddcp
 
 Synopsis:
 
-lddcp  recursively  search  for  any  shared  libraries required by one or more
-programs  (or  libraries)  and  will  copy  those  into  a  destination  folder
-preserving  the  full  absolute path of each library relative to '/'. It is the
-equivalent of running 'ldd' and then manually copying everything it reports.
+lddcp  recursively  searches  for  the shared libraries required by one or more
+programs  (or  libraries) and copies them into a destination folder, preserving
+the  full  absolute  path of each library relative to the root directory. It is
+the  equivalent  of  running  'ldd'  and  then  manually  copying everything it
+reports.
 
-lddcp  will parse ELF binary's headers to read the 'PT_INTERP' (dynamic linker)
-and the 'DT_NEEDED' (dynamic entries) segments.
+For  each  input,  lddcp parses the ELF headers to read the 'PT_INTERP' segment
+(the  dynamic  linker)  and  the  'DT_NEEDED'  entries (the shared libraries it
+depends  on).  Each  'DT_NEEDED' name is searched for in the directories parsed
+from '/etc/ld.so.conf' and its included files, plus a set of standard multiarch
+fallback paths.
 
-Each   'DT_NEEDED'   name   is   searched   in   the  directories  parsed  from
-'/etc/ld.so.conf'  and  its includes, plus a set of standard multiarch fallback
-paths.
+If  the  resolved  path  of  a needed library is a symbolic link, lddcp records
+every  intermediate  link  and  the  final  real  file.  Real  files are copied
+byte-for-byte  and  symlinks  are  recreated  as  symlinks pointing to the same
+target, so the destination reflects the on-disk layout of the source.
 
-If  the  resolved path of the 'DT_NEEDED' entry is a symlink, lddcp will record
-all intermediate links and the final real file.
-
-Real  files  will  be  copied  byte-for-byte  and symlinks will be recreated as
-symlinks pointing to the same target.
-
-Every  newly  discovered  library  will  itself  be scanned for its 'DT_NEEDED'
-entries  that  will  also  be  processed.  lddcp  will  keep track of processed
-libraries  to avoid those that were already processed as well as any dependency
-loops.
+Every  newly  discovered library is itself scanned for its 'DT_NEEDED' entries,
+which  are  also  processed.  lddcp  tracks  visited  paths  to  avoid rescans,
+redundant copies, and dependency loops.
 
 Usage:
 
-lddcp -d <DIRECTORY> [-h] [-l <LIBRARY>] [-p <PROGRAM>] [-v]
+lddcp [-d  directory] [-h] [-l  library]... [-p  program]... [-v]
 
--d <DIRECTORY> Folder to where the shared libraries will be copied to.
--h             Show this help message and exit.
--l <LIBRARY>   Library to scan for shared libraries (will also be copied).
--p <PROGRAM>   Program to scan for shared libraries.
--v             Show program's version number and exit.
+-d directory
+
+	Destination  directory  where  the  shared  libraries  will  be  copied to.
+	Required.
+
+-h  Show a help message and exit.
+
+-l library
+
+	Library  to  scan  for  shared  libraries.  The library itself will also be
+	copied  to the destination folder. May be given several times. At least one
+	of -p or -l is required.
+
+-p program
+
+	Program  to  scan  for  shared libraries. The program itself is not copied,
+	only  its  dependencies are. May be given several times. At least one of -p
+	or -l is required.
+
+-v  Show the program's version number and exit.
 
 Examples:
 
-The following example will check the 'sh' program for shared libraries and copy
-them to the '/tmp/requirements' folder:
+Copy  the dependencies of /bin/sh into /tmp/requirements (including the dynamic
+linker):
 
-lddcp -p /bin/sh -d /tmp/requirements
+	$ lddcp -p /bin/sh -d /tmp/requirements
 
-Checking  several  programs  is also possible. The following example will check
-the 'sh', the 'ls' and the 'ln' programs using several '-p' options:
+Copy the dependencies of several programs using several -p options:
 
-lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
+	$ lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
+
+Copy  a  specific  library  and  its  dependencies,  for  example  to  bundle a
+dependency that a program searches for at run time:
+
+	$ lddcp -l libnss_dns.so.2 -d /tmp/requirements
+
+Exit Status:
+
+	0   Success. Also returned by -h and -v.
+	1   Invalid option or a missing option argument.
+	2   Missing required option (-d or at least one of -p/-l).
+	3   The destination directory is invalid or could not be created.
+
+Notes:
+
+ldd  reports linux-vdso.so.1 (the virtual dynamic shared object injected by the
+kernel),  which has no file on disk. lddcp silently skips any needed library it
+cannot find on disk.
+
+Libraries  are  looked  up  only  by  name in the configured search paths. If a
+needed  library cannot be found, a warning is printed to standard error and the
+scan continues.
 */
 package main
 
@@ -73,12 +107,12 @@ const (
 
 	header string = "%s version %s\nby %s under %s license\n\n"
 
-	usageHelp string = `Usage: %s -d <DIRECTORY> [-h] [-l <LIBRARY>] [-p <PROGRAM>] [-v]
-  -d <DIRECTORY> Folder to where the shared libraries will be copied to.
+	usageHelp string = `Usage: %s [-d  directory] [-h] [-l  library]... [-p  program]... [-v]
+  -d directory   Directory where the shared libraries will be copied to.
   -h	         Show this help message and exit.
-  -l <LIBRARY>   Library to scan for shared libraries (will also be copied).
-  -p <PROGRAM>   Program to scan for shared libraries.
-  -v	         Show program's version number and exit.
+  -l library     Library to scan for shared libraries (will also be copied).
+  -p program     Program to scan for shared libraries.
+  -v	         Show the program's version number and exit.
 `
 
 	ldSoConf string = "/etc/ld.so.conf"
@@ -107,13 +141,6 @@ var (
 	libraries   []string
 	destination string
 )
-
-// elfInfo  holds  the  information  extracted  from  an  ELF  file  (PT_INTERP
-// interpreter, and shared libraries).
-type elfInfo struct {
-	interp string
-	needed []string
-}
 
 // scanner holds the state for the recursive library scan.
 type scanner struct {
@@ -155,7 +182,7 @@ func (s *scanner) parsePath(path string) error {
 		return nil
 	}
 	s.visited[realPath] = true
-	info, err := parseELF(realPath)
+	interp, needed, err := parseELF(realPath)
 	if err != nil {
 		return errors.Join(fmt.Errorf("invalid ELF file %q", realPath), err)
 	}
@@ -167,16 +194,16 @@ func (s *scanner) parsePath(path string) error {
 	if err := s.copyEntry(realPath); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to copy file %q\n", realPath)
 	}
-	if info.interp != "" {
-		if err := s.parsePath(info.interp); err != nil {
+	if interp != "" {
+		if err := s.parsePath(interp); err != nil {
 			err = errors.Join(
-				fmt.Errorf("invalid interpreter %q", info.interp),
+				fmt.Errorf("invalid interpreter %q", interp),
 				err,
 			)
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 	}
-	for _, libName := range info.needed {
+	for _, libName := range needed {
 		libPath := findLibrary(libName, s.searchPaths)
 		if libPath == "" {
 			fmt.Fprintf(
@@ -245,17 +272,14 @@ func copySymlink(src, dst string) error {
 // then  will  append  each  path  from  fallbackLibPaths  (if  exists  on  the
 // filesystem) ignoring already appended ones.
 func defaultLibPaths() []string {
-	paths := parseLdSoConf(ldSoConf, make(map[string]bool))
-	parsed := make(map[string]bool, len(paths))
-	for _, path := range paths {
-		parsed[path] = true
-	}
+	visited := make(map[string]bool)
+	paths := parseLdSoConf(ldSoConf, visited)
 	for _, path := range fallbackLibPaths {
-		if !parsed[path] {
+		if !visited[path] {
 			if _, err := os.Stat(path); err == nil {
 				paths = append(paths, path)
 			}
-			parsed[path] = true
+			visited[path] = true
 		}
 	}
 	return paths
@@ -326,37 +350,35 @@ func parseArgs(args []string) {
 // parseELF  returns  the  information  of  the  ELF  file  at  path (PT_INTERP
 // interpreter  and  the  DT_NEEDED  shared  library names) and the first error
 // encountered, if any.
-func parseELF(path string) (*elfInfo, error) {
+func parseELF(path string) (interp string, needed []string, err error) {
 	file, err := elf.Open(path)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	defer func() { _ = file.Close() }()
 	if file.Class != elf.ELFCLASS64 && file.Class != elf.ELFCLASS32 {
-		return nil, fmt.Errorf("unsupported ELF class %q", file.Class)
+		return "", nil, fmt.Errorf("unsupported ELF class %q", file.Class)
 	}
-	info := &elfInfo{}
 	for _, header := range file.Progs {
 		if header.Type != elf.PT_INTERP {
 			continue
 		}
 		data, err := io.ReadAll(header.Open())
 		if err != nil {
-			return nil, errors.Join(
+			return "", nil, errors.Join(
 				errors.New("unable to read PT_INTERP segment"), err,
 			)
 		}
-		info.interp = strings.TrimRight(string(data), "\x00")
+		interp = strings.TrimRight(string(data), "\x00")
 		break
 	}
-	needed, err := file.ImportedLibraries() // nil, nil for static binaries.
+	needed, err = file.ImportedLibraries() // nil, nil for static binaries.
 	if err != nil {
-		return nil, errors.Join(
+		return "", nil, errors.Join(
 			errors.New("unable to read DT_NEEDED entries"), err,
 		)
 	}
-	info.needed = needed
-	return info, nil
+	return interp, needed, nil
 }
 
 // parseLdSoConf  reads  the  confFile  (ld.so.conf) and returns a deduplicated
@@ -372,7 +394,6 @@ func parseLdSoConf(confFile string, visited map[string]bool) []string {
 		return nil
 	}
 	var paths []string
-	// for line := range strings.SplitSeq(string(data), "\n") {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -461,7 +482,7 @@ func main() {
 			continue
 		}
 		realPath, _ := resolveSymlink(absPath)
-		info, err := parseELF(realPath)
+		interp, needed, err := parseELF(realPath)
 		if err != nil {
 			fmt.Fprintf(
 				os.Stderr,
@@ -472,16 +493,16 @@ func main() {
 			continue
 		}
 		scanner.visited[realPath] = true
-		if info.interp != "" {
-			if err := scanner.parsePath(info.interp); err != nil {
+		if interp != "" {
+			if err := scanner.parsePath(interp); err != nil {
 				err = errors.Join(
-					fmt.Errorf("invalid interpreter %q", info.interp),
+					fmt.Errorf("invalid interpreter %q", interp),
 					err,
 				)
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 			}
 		}
-		for _, libName := range info.needed {
+		for _, libName := range needed {
 			libPath := findLibrary(libName, scanner.searchPaths)
 			if libPath == "" {
 				fmt.Fprintf(
@@ -496,7 +517,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 			}
 		}
-		fmt.Printf("  direct dependencies: %v\n", info.needed)
+		fmt.Printf("  direct dependencies: %v\n", needed)
 	}
 	for _, lib := range libraries {
 		fmt.Printf("scanning library: %q\n", lib)
