@@ -1,0 +1,146 @@
+.\" SPDX-FileCopyrightText: 2026 Frederico Martins
+.\" SPDX-License-Identifier: GPL-3.0-only
+.\"
+.TH LDDCP 1 "2026-08-12" "lddcp 0.1.0" "User Commands"
+.SH NAME
+lddcp \- copy required shared libraries into a directory
+.SH SYNOPSIS
+.B lddcp
+.RI "[\-d "
+.IR directory ]
+.RB [ \-h ]
+.RI "[\-l "
+.IR library ]...
+.RI "[\-p "
+.IR program ]...
+.RB [ \-v ]
+.SH DESCRIPTION
+.B lddcp
+recursively searches for the shared libraries required by one or more programs
+(or libraries) and copies them into a destination folder, preserving the full
+absolute path of each library relative to the root directory.
+It is the equivalent of running
+.BR ldd "(1)"
+and then manually copying everything it reports.
+.PP
+For each input,
+.B lddcp
+parses the ELF headers to read the
+.B PT_INTERP
+segment (the dynamic linker) and the
+.B DT_NEEDED
+entries (the shared libraries it depends on).
+Each
+.B DT_NEEDED
+name is searched for in the directories parsed from
+.I /etc/ld.so.conf
+and its included files, plus a set of standard multiarch fallback paths.
+.PP
+If the resolved path of a needed library is a symbolic link,
+.B lddcp
+records every intermediate link and the final real file.
+Real files are copied byte-for-byte and symlinks are recreated as symlinks
+pointing to the same target, so the destination reflects the on-disk layout of
+the source.
+.PP
+Every newly discovered library is itself scanned for its
+.B DT_NEEDED
+entries, which are also processed.
+.B lddcp
+tracks visited paths to avoid rescans, redundant copies, and dependency loops.
+.SH OPTIONS
+.TP
+.BI \-d " directory"
+Destination directory where the shared libraries will be copied to.
+Required.
+.TP
+.B \-h
+Show a help message and exit.
+.TP
+.BI \-l " library"
+Library to scan for shared libraries.
+The library itself will also be copied to the destination folder.
+May be given several times.
+At least one of
+.B \-p
+or
+.B \-l
+is required.
+.TP
+.BI \-p " program"
+Program to scan for shared libraries.
+The program itself is not copied, only its dependencies are.
+May be given several times.
+At least one of
+.B \-p
+or
+.B \-l
+is required.
+.TP
+.B \-v
+Show the program's version number and exit.
+.SH EXAMPLES
+Copy the dependencies of
+.I /bin/sh
+into
+.I /tmp/requirements
+(including the dynamic linker):
+.IP
+.EX
+$ lddcp -p /bin/sh -d /tmp/requirements
+.EE
+.PP
+Copy the dependencies of several programs using several
+.B \-p
+options:
+.IP
+.EX
+$ lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
+.EE
+.PP
+Copy a specific library and its dependencies, for example to bundle a
+dependency that a program searches for at run time:
+.IP
+.EX
+$ lddcp -l libnss_dns.so.2 -d /tmp/requirements
+.EE
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+Also returned by
+.B \-h
+and
+.B \-v\fR.
+.TP
+.B 1
+Invalid option or a missing option argument.
+.TP
+.B 2
+Missing required option (\-d or at least one of \-p/\-l).
+.TP
+.B 3
+The destination directory is invalid or could not be created.
+.SH NOTES
+.B ldd
+reports
+.I linux-vdso.so.1
+(the virtual dynamic shared object injected by the kernel), which has no file on
+disk.
+.B lddcp
+silently skips any needed library it cannot find on disk.
+.PP
+Libraries are looked up only by name in the configured search paths. If a
+needed library cannot be found, a warning is printed to standard error and the
+scan continues.
+.SH FILES
+.TP
+.I /etc/ld.so.conf
+Configuration file listing library search paths. Included files are read
+recursively and existing directories only are retained.
+.SH AUTHOR
+Frederico Martins
+.SH SEE ALSO
+.BR ldd (1),
+.BR ldconfig (8),
+.BR ld.so (8)
