@@ -103,7 +103,7 @@ import (
 const (
 	Author  string = "Frederico Martins"
 	License string = "GPLv3"
-	Version string = "0.1.0"
+	Version string = "0.2.0"
 
 	header string = "%s version %s\nby %s under %s license\n\n"
 
