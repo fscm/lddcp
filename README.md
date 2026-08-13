@@ -1,35 +1,32 @@
 # lddcp
 
-`lddcp` recursively search for any shared libraries required by one or more
-programs (or libraries) and will copy those into a destination folder
-preserving the full absolute path of each library relative to `/`. It is the
-equivalent of running `ldd` and then manually copying everything it reports.
+`lddcp` recursively searches for the shared libraries required by one or more
+programs (or libraries) and copies them into a destination folder, preserving
+the full absolute path of each library relative to the root directory. It is
+the equivalent of running `ldd` and then manually copying everything it reports.
 
 ## Synopsis
 
-`lddcp` will parse ELF binary's headers to read the `PT_INTERP` (dynamic
-linker) and the `DT_NEEDED` (dynamic entries) segments.
+For each input, `lddcp` parses the ELF headers to read the `PT_INTERP` segment
+(the dynamic linker) and the `DT_NEEDED` entries (the shared libraries it
+depends on). Each `DT_NEEDED` name is searched for in the directories parsed
+from `/etc/ld.so.conf` and its included files, plus a set of standard multiarch
+fallback paths.
 
-Each `DT_NEEDED` name is searched in the directories parsed from
-`/etc/ld.so.conf` and its includes, plus a set of standard multiarch fallback
-paths.
+If the resolved path of a needed library is a symbolic link, `lddcp` records
+every intermediate link and the final real file. Real files are copied
+byte-for-byte and symlinks are recreated as symlinks pointing to the same
+target, so the destination reflects the on-disk layout of the source.
 
-If the resolved path of the `DT_NEEDED` entry is a symlink, `lddcp` will record
-all intermediate links and the final real file.
-
-Real files will be copied byte-for-byte and symlinks will be recreated as
-symlinks pointing to the same target.
-
-Every newly discovered library will itself be scanned for its `DT_NEEDED`
-entries that will also be processed. `lddcp` will keep track of processed
-libraries to avoid those that were already processed as well as any dependency
-loops.
+Every newly discovered library is itself scanned for its `DT_NEEDED` entries,
+which are also processed. `lddcp` tracks visited paths to avoid rescans,
+redundant copies, and dependency loops.
 
 ### Note (`linux-vdso.so.1`)
 
 `ldd` reports `linux-vdso.so.1` (the virtual dynamic shared object injected by
-the kernel). This is not a file on disk (it has no path) so `lddcp` silently
-skips it.
+the kernel), which has no file on disk. `lddcp` silently skips any needed
+library it cannot find on disk.
 
 ### Features
 
@@ -59,27 +56,34 @@ lddcp [options]
 
 ### Program Options
 
-* `-d <DIRECTORY>` - *[required]* Folder to where the shared libraries will be
+* `-d <directory>` - *[required]* Directory where the shared libraries will be
   copied to.
-* `-h` - Show the help message and exit.
-* `-l <LIBRARY>` - Library to scan for shared libraries. Several Libraries can
-  be set using extra `-l` options. The library will also be copied to the
-  destination folder.
-* `-p <PROGRAM>` - *[required]* Program to scan for shared libraries. Several
-  programs can be set using extra `-p` options.
-* `-v` - Show program's version number and exit.
+* `-h` - Show a help message and exit.
+* `-l <library>` - Library to scan for shared libraries. The library itself
+  will also be copied to the destination folder. May be given several times.
+  At least one of `-p` or `-l` is required.
+* `-p <program>` - *[required]* Program to scan for shared libraries. The
+  program itself is not copied, only its dependencies are. May be given several
+  times. At least one of `-p` or `-l` is required.
+* `-v` - Show the program's version number and exit.
 
 ### Examples
 
-The following example will check the *sh* program for shared libraries and copy
-them to the */tmp/requirements* folder:
+Copy the dependencies of */bin/sh* into */tmp/requirements* (including the
+dynamic linker):
 
 ```
 lddcp -p /bin/sh -d /tmp/requirements
 ```
 
-Checking several programs is also possible. The following example will check
-the *sh*, the *ls* and the *ln* programs using several `-p` options:
+Copy the dependencies of several programs using several -p options:
+
+```
+lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
+```
+
+Copy a specific library and its dependencies, for example to bundle a
+dependency that a program searches for at run time:
 
 ```
 lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
@@ -88,7 +92,7 @@ lddcp -p /bin/sh -p /bin/ls -p /bin/ln -d /tmp/requirements
 ## Supported Platforms
 
 `lddcp` reads the Linux ELF ABI and `/etc/ld.so.conf`, so it only makes sense
-to run it on Linux. The binaries are statically linked and have no runtime
+to run it on Linux. `lddcp` binaries are statically linked and have no runtime
 dependencies.
 
 | OS    | Architecture |
@@ -99,7 +103,7 @@ dependencies.
 
 ## Build (from source)
 
-Golang (version 1.20.0 or above) needs to be installed on your local computer.
+Golang (version 1.21.0 or above) needs to be installed on your local computer.
 Golang setup can be found at [go.dev](https://go.dev).
 
 Just (version 1.46.0 or above) needs to be installed on your local computer.
