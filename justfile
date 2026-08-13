@@ -20,6 +20,7 @@ COVERAGE_DATA := join(TMPDIR, 'coverage.dat')
 COVERAGE_REPORT := join(DOCS_DIR, 'coverage-report.html')
 
 GO := require('go')
+MINGO := require('mingo')
 MANDOC := require('mandoc')
 TAR := require('tar')
 FORMAT := require(if which('gofumpt') != '' { 'gofumpt' } else { 'gofmt' })
@@ -31,6 +32,7 @@ BUILD_ARGS := '-trimpath'
 FORMAT_ARGS := '-l -w'
 FORMAT_SHOW_ARGS := '-d'
 MANDOC_ARGS := '-T lint'
+MINGO_ARGS := '-tests' # '-v'
 TEST_ARGS := '-cover -coverprofile ' + COVERAGE_DATA # '-v'
 
 LDFLAGS := '-s -w'
@@ -125,6 +127,11 @@ format:
 format-show:
     # Getting required code formats...
     @-{{ FORMAT }} {{ FORMAT_SHOW_ARGS }} "{{ PROJECT_DIR }}"
+
+# Calculates Go minimum version required.
+goversion:
+    # Finding minimum Go version...
+    @{{ MINGO }} {{ MINGO_ARGS }}  {{ PROJECT_DIR }}
 
 # Shows this help message.
 help:
