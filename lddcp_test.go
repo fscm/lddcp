@@ -460,7 +460,7 @@ func TestScannerParsePath_Integration(t *testing.T) {
 		visited:     make(map[string]bool),
 		copied:      make(map[string]bool),
 	}
-	if err := s.parsePath(bin); err != nil {
+	if _, err := s.parsePath(bin, true); err != nil {
 		t.Fatalf("parsePath() error: [%q] %v", bin, err)
 	}
 	if len(s.copied) == 0 {
@@ -493,7 +493,7 @@ func TestScanneParsePath_InvalidELF(t *testing.T) {
 		visited:     make(map[string]bool),
 		copied:      make(map[string]bool),
 	}
-	if err := s.parsePath(path); err == nil {
+	if _, err := s.parsePath(path, true); err == nil {
 		t.Fatal("expected an error for a non-ELF path, got nil")
 	}
 	if len(s.copied) != 0 {
@@ -512,7 +512,7 @@ func TestScannerParsePath_SkipsAlreadyVisited(t *testing.T) {
 		visited:     map[string]bool{realPath: true},
 		copied:      make(map[string]bool),
 	}
-	if err := s.parsePath(fakePath); err != nil {
+	if _, err := s.parsePath(fakePath, true); err != nil {
 		t.Errorf(
 			"expected an already-visited path to be skipped silently: %v",
 			err,
@@ -535,7 +535,7 @@ func TestScannerParsePath_MissingLibraryWarnsButSucceeds(t *testing.T) {
 		visited:     make(map[string]bool),
 		copied:      make(map[string]bool),
 	}
-	if err := s.parsePath(bin); err != nil {
+	if _, err := s.parsePath(bin, true); err != nil {
 		t.Fatalf(
 			"parsePath() error: got %v wanted nil "+
 				"(missing deps should only warn)",
@@ -582,7 +582,7 @@ func TestScannerParsePath_PreservesSymlinkChainAndPath(t *testing.T) {
 		visited:     make(map[string]bool),
 		copied:      make(map[string]bool),
 	}
-	if err := s.parsePath(link1); err != nil {
+	if _, err := s.parsePath(link1, true); err != nil {
 		t.Fatalf("parsePath() error: %v", err)
 	}
 	for _, path := range []string{link1, link2, target} {

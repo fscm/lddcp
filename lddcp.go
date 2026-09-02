@@ -107,7 +107,7 @@ const (
 
 	header string = "%s version %s\nby %s under %s license\n\n"
 
-	usageHelp string = `Usage: %s [-d  directory] [-h] [-l  library]... [-p  program]... [-v]
+	usage string = `Usage: %s [-d  directory] [-h] [-l  library]... [-p  program]... [-v]
   -d directory   Directory where the shared libraries will be copied to.
   -h	         Show this help message and exit.
   -l library     Library to scan for shared libraries (will also be copied).
@@ -172,30 +172,38 @@ func (s *scanner) copyEntry(src string) error {
 // the  real  file,  and  then recursively processes the ELF interpreter of the
 // file  and  any  shared  libraries  it  depends  on.  Returns the first error
 // encountered, if any.
-func (s *scanner) parsePath(path string) error {
+func (s *scanner) parsePath(path string, copy bool) ([]string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return err
+		return nil, errors.Join(
+			fmt.Errorf("failed to get libraries for %q", path),
+			err,
+		)
 	}
 	realPath, links := resolveSymlink(absPath)
 	if s.visited[realPath] {
-		return nil
+		return nil, nil
 	}
 	s.visited[realPath] = true
 	interp, needed, err := parseELF(realPath)
 	if err != nil {
-		return errors.Join(fmt.Errorf("invalid ELF file %q", realPath), err)
+		return nil, errors.Join(
+			fmt.Errorf("invalid ELF file %q", realPath),
+			err,
+		)
 	}
-	for _, link := range links {
-		if err := s.copyEntry(link); err != nil {
-			fmt.Fprintf(os.Stderr, "unable to copy symlink %q\n", link)
+	if copy {
+		for _, link := range links {
+			if err := s.copyEntry(link); err != nil {
+				fmt.Fprintf(os.Stderr, "unable to copy symlink %q\n", link)
+			}
+		}
+		if err := s.copyEntry(realPath); err != nil {
+			fmt.Fprintf(os.Stderr, "unable to copy file %q\n", realPath)
 		}
 	}
-	if err := s.copyEntry(realPath); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to copy file %q\n", realPath)
-	}
 	if interp != "" {
-		if err := s.parsePath(interp); err != nil {
+		if _, err := s.parsePath(interp, true); err != nil {
 			err = errors.Join(
 				fmt.Errorf("invalid interpreter %q", interp),
 				err,
@@ -214,11 +222,11 @@ func (s *scanner) parsePath(path string) error {
 			)
 			continue
 		}
-		if err := s.parsePath(libPath); err != nil {
+		if _, err := s.parsePath(libPath, true); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 	}
-	return nil
+	return needed, nil
 }
 
 // copyFile  copies  a  file  from  src to dst preserving the file's permission
@@ -310,7 +318,7 @@ func parseArgs(args []string) {
 			}
 			destination = args[i]
 		case "-h":
-			fmt.Printf(usageHelp, name)
+			fmt.Printf(usage, name)
 			os.Exit(0)
 		case "-v":
 			fmt.Println(Version)
@@ -472,17 +480,7 @@ func main() {
 	fmt.Printf(header, name, Version, Author, License)
 	for _, program := range programs {
 		fmt.Printf("scanning program: %q\n", program)
-		absPath, err := filepath.Abs(program)
-		if err != nil {
-			err = errors.Join(
-				fmt.Errorf("failed to get libraries for %q", program),
-				err,
-			)
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			continue
-		}
-		realPath, _ := resolveSymlink(absPath)
-		interp, needed, err := parseELF(realPath)
+		needed, err := scanner.parsePath(program, false)
 		if err != nil {
 			fmt.Fprintf(
 				os.Stderr,
@@ -492,36 +490,11 @@ func main() {
 			)
 			continue
 		}
-		scanner.visited[realPath] = true
-		if interp != "" {
-			if err := scanner.parsePath(interp); err != nil {
-				err = errors.Join(
-					fmt.Errorf("invalid interpreter %q", interp),
-					err,
-				)
-				fmt.Fprintf(os.Stderr, "%v\n", err)
-			}
-		}
-		for _, libName := range needed {
-			libPath := findLibrary(libName, scanner.searchPaths)
-			if libPath == "" {
-				fmt.Fprintf(
-					os.Stderr,
-					"library %q not found (needed by %q)\n",
-					libName,
-					program,
-				)
-				continue
-			}
-			if err := scanner.parsePath(libPath); err != nil {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
-			}
-		}
 		fmt.Printf("  direct dependencies: %v\n", needed)
 	}
 	for _, lib := range libraries {
 		fmt.Printf("scanning library: %q\n", lib)
-		if err := scanner.parsePath(lib); err != nil {
+		if _, err := scanner.parsePath(lib, true); err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 	}
