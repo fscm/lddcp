@@ -240,7 +240,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = in.Close() }()
+	defer in.Close()
 	info, err := in.Stat()
 	if err != nil {
 		return err
@@ -253,7 +253,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = out.Close() }()
+	defer out.Close()
 	_, err = io.Copy(out, in)
 	return err
 }
@@ -363,7 +363,7 @@ func parseELF(path string) (interp string, needed []string, err error) {
 	if err != nil {
 		return "", nil, err
 	}
-	defer func() { _ = file.Close() }()
+	defer file.Close()
 	if file.Class != elf.ELFCLASS64 && file.Class != elf.ELFCLASS32 {
 		return "", nil, fmt.Errorf("unsupported ELF class %q", file.Class)
 	}
