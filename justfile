@@ -146,7 +146,7 @@ help:
 lint: && format-show vet
     # Checking the code...
 
-# Checks the project for code smells ('format' and 'vet').
+# Checks the man page for issues/errors.
 lint-man:
     # Checking the man page...
     @{{ MANDOC }} {{ MANDOC_ARGS }} "{{ join(PROJECT_DIR, PROJECT_NAME) }}.1"
