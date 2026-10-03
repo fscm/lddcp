@@ -42,7 +42,7 @@ default: help
 
 # Builds the project.
 build os arch:
-    @{{ MKDIR }} {{ GOTMPDIR }}
+    @{{ MKDIR }} "{{ GOTMPDIR }}"
     # Cleaning build artifacts for {{ os }}/{{ arch }}...
     @{{ RM }} "{{ join(BUILD_DIR, os, arch) }}"
     # Building artifacts for {{ os }}/{{ arch }}...
@@ -73,9 +73,9 @@ clean-all: clean clean-cache docs-clean
 clean-cache:
     # Cleaning caches...
     @{{ GO }} clean -cache
-    @{{ RM }} {{ GOCACHE }}
+    @{{ RM }} "{{ GOCACHE }}"
     # Cleaning temporary files...
-    @{{ RM }} {{ GOTMPDIR }}
+    @{{ RM }} "{{ GOTMPDIR }}"
 
 # Creates distribution package.
 dist os arch:
@@ -83,7 +83,7 @@ dist os arch:
     @{{ RM }} "{{ join(DIST_DIR, PROJECT_NAME) }}-{{ os }}-{{ arch }}"*
     # Building distribution package for {{ os }}-{{ arch }}...
     @{{ \
-        if path_exists(join(TMPDIR, PROJECT_NAME)) != 'true' { \
+        if path_exists(join(BUILD_DIR, os, arch, PROJECT_NAME)) != 'true' { \
             f'just build {{os}} {{arch}}' \
         } else { \
             '' \
@@ -131,7 +131,8 @@ format-show:
 # Calculates Go minimum version required.
 goversion:
     # Finding minimum Go version...
-    @{{ MINGO }} {{ MINGO_ARGS }}  {{ PROJECT_DIR }}
+    @{{ MKDIR }} "{{ GOTMPDIR }}"
+    @{{ MINGO }} {{ MINGO_ARGS }} "{{ PROJECT_DIR }}"
 
 # Shows this help message.
 help:
@@ -153,14 +154,14 @@ lint-man:
 
 # Runs the app.
 run *args:
-    @{{ MKDIR }} {{ GOTMPDIR }}
-    @-{{ GO }} run {{ PROJECT_DIR }} {{ args }}
+    @{{ MKDIR }} "{{ GOTMPDIR }}"
+    @-{{ GO }} run "{{ PROJECT_DIR }}" {{ args }}
 
 # Runs the tests.
 test *tests:
-    @{{ MKDIR }} {{ GOTMPDIR }}
+    @{{ MKDIR }} "{{ GOTMPDIR }}"
     # Running tests... {{ tests }}
-    @-{{ GO }} test {{ TEST_ARGS }} {{ PROJECT_DIR }} \
+    @-{{ GO }} test {{ TEST_ARGS }} "{{ join(PROJECT_DIR, "...") }}" \
     {{ if tests != '' { f'-run {{tests}}' } else { '' } }}
 
 # Creates the tests coverage report (html)
@@ -172,6 +173,6 @@ test-coverage:
 
 # Examines the code for suspicious constructs.
 vet:
-    @{{ MKDIR }} {{ GOTMPDIR }}
+    @{{ MKDIR }} "{{ GOTMPDIR }}"
     # Examining the code...
-    @{{ GO }} vet {{ PROJECT_DIR }}
+    @{{ GO }} vet "{{ join(PROJECT_DIR, "...") }}"
