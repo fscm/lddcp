@@ -6,13 +6,13 @@
 lddcp \- copy required shared libraries into a directory
 .SH SYNOPSIS
 .B lddcp
-.RI "[\-d "
+.RB [ \-d
 .IR directory ]
 .RB [ \-h ]
-.RI "[\-l "
-.IR library ]...
-.RI "[\-p "
-.IR program ]...
+.RB [ \-l
+.IR library ...]
+.RB [ \-p
+.IR program ...]
 .RB [ \-v ]
 .SH DESCRIPTION
 .B lddcp
@@ -138,9 +138,9 @@ scan continues.
 .I /etc/ld.so.conf
 Configuration file listing library search paths. Included files are read
 recursively and existing directories only are retained.
-.SH AUTHOR
-Frederico Martins
 .SH SEE ALSO
 .BR ldd (1),
 .BR ldconfig (8),
 .BR ld.so (8)
+.SH AUTHOR
+Frederico Martins.
