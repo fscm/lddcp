@@ -107,12 +107,11 @@ Golang (version 1.21.0 or above) needs to be installed on your local computer.
 Golang setup can be found at [go.dev](https://go.dev).
 
 Just (version 1.46.0 or above) needs to be installed on your local computer.
-
 Just is used to automate several steps of the development process. Just setup
 can be found at [just.systems](https://just.systems).
 
-All of the commands described bellow are to be executed on the root folder
-of this project.
+All of the commands described bellow are to be executed on the root folder of
+this project.
 
 To build the `lddcp` binaries use the following command:
 
